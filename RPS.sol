@@ -11,7 +11,7 @@ contract RPS {
     uint public p1Roll;
     uint public p2Roll;
 
-
+    event LogWinner(address winner);
     
     function RPC() 
     public
@@ -24,23 +24,26 @@ contract RPS {
     payable
     returns (bool success)
     {
-        require(msg.sender != 0);
         require(msg.value > 0);
         if(msg.value == 123123) {
             player1 = msg.sender;
             return true;
         }
         if(msg.value == 456456) {
-            player2 == msg.sender;
+            player2 = msg.sender;
             return true;
         }
     }
     
-    function play(uint roll)
+    function play()
     public
     payable
     {
+        require(msg.sender == player1 || msg.sender == player2);
         require(msg.value < 4);
+        
+        uint roll = msg.value;
+        
         //Initial play
         if(p1Roll == 0 && p2Roll == 0) 
         {
@@ -91,6 +94,7 @@ contract RPS {
             if(p1Roll == 1 && p2Roll == 2)
             {
                 player2.transfer(this.balance);
+                LogWinner(player2);
                 p1Roll = 0;
                 p2Roll = 0;
             }
@@ -98,6 +102,7 @@ contract RPS {
             if(p1Roll == 2 && p2Roll == 1)
             {
                 player1.transfer(this.balance);
+                LogWinner(player1);
                 p1Roll = 0;
                 p2Roll = 0;
             }
@@ -107,6 +112,7 @@ contract RPS {
             if(p1Roll == 1 && p2Roll == 3)
             {
                 player1.transfer(this.balance);
+                LogWinner(player1);
                 p1Roll = 0;
                 p2Roll = 0;
             }
@@ -114,6 +120,7 @@ contract RPS {
             if(p1Roll == 3 && p2Roll == 1)
             {
                 player2.transfer(this.balance);
+                LogWinner(player2);
                 p1Roll = 0;
                 p2Roll = 0;
             }
@@ -123,6 +130,7 @@ contract RPS {
             if(p1Roll == 2 && p2Roll == 3)
             {
                 player2.transfer(this.balance);
+                LogWinner(player2);
                 p1Roll = 0;
                 p2Roll = 0;
             }
@@ -130,6 +138,7 @@ contract RPS {
             if(p1Roll == 3 && p2Roll == 2)
             {
                 player1.transfer(this.balance);
+                LogWinner(player1);
                 p1Roll = 0;
                 p2Roll = 0;
             }
