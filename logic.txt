@@ -1,0 +1,37 @@
+pragma solidity ^0.4.13;
+
+contract Array {
+
+    uint8[4] x = [5, 6, 7, 8];
+    uint8[3][3] y;
+
+    function Array()
+    public
+    {
+        y[0] = [0, 0, 1];
+        y[1] = [1, 0, 0];
+        y[2] = [0, 1, 0];
+    }
+
+    function returnArray(uint8 _val)
+    public
+    view
+    returns(uint8 val)
+    {
+        //require(0 < _val && _val < 3);
+        return x[_val];
+    }
+
+    function returnMatrix(uint8 _array, uint8 _index)
+    public
+    view
+    returns(uint8 array)
+    {
+        uint8 arrayAdj;
+        uint8 indexAdj;
+        arrayAdj = _array - 1;
+        indexAdj = _index - 1;
+        return(y[arrayAdj][indexAdj]);
+    }
+
+}
