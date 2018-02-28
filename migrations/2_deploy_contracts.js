@@ -1,6 +1,6 @@
-var RPC = artifacts.require("./RockPaperScissors.sol");
+var RockPaperScissors = artifacts.require("./RockPaperScissors.sol");
 //var MetaCoin = artifacts.require("./MetaCoin.sol");
 
 module.exports = function(deployer) {
-  deployer.deploy(RPC);
+  deployer.deploy(RockPaperScissors);
 };
