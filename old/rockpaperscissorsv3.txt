@@ -15,6 +15,8 @@ contract RockPaperScissors {
         address player2;
         bytes32 p1HashedMove;
         uint8 p2Move;
+        bool isP1Locked;
+        bool isP2Locked;
         uint256 jackpot;
         uint256 p1Winnings;
         uint256 p2Winnings;
@@ -24,8 +26,7 @@ contract RockPaperScissors {
 
     uint8[3][3] public gameLogic;
 
-    event LogGameCreated(uint256 eGame, address ePlayer1, address ePlayer2, uint256 eJackpot);
-    event LogPlayer2(uint256 eGame, address ePlayer2, uint256 eJackpot);
+    event LogPlayer(uint256 eGame, address ePlayer, uint256 eJackpot);
     event LogWinner(uint256 eGame, address eWinner, uint256 eAmount);
     event LogWithdraw(uint256 eGame, address eWinner, uint256 eAmount);
     event LogForfeit(uint256 eGame, address eWinner, uint256 eAmount);
@@ -51,7 +52,7 @@ contract RockPaperScissors {
         return keccak256(_player, _move, _unHashedPassword);
     }
 
-    function createGame(uint256 _game, address _player2, bytes32 _hashedMove)
+    function player1(uint256 _game, bytes32 _hashedMove)
     public
     payable
     returns(bool success)
@@ -59,13 +60,13 @@ contract RockPaperScissors {
         require(msg.sender != 0);
         require(_game != 0);
         require(msg.value > 0);
-
+        require(!games[_game].isP1Locked);
         games[_game].player1 = msg.sender;
-        games[_game].player2 = _player2;
         games[_game].p1HashedMove = _hashedMove;
         games[_game].jackpot = msg.value;
+        games[_game].isP1Locked = true;
 
-        LogGameCreated(_game, _player1, _player2, msg.value);
+        LogPlayer(_game, msg.sender, msg.value);
         return true;
 
     }
@@ -75,13 +76,19 @@ contract RockPaperScissors {
     payable
     returns(bool success)
     {
-        require(msg.sender == games[_game].player2);
+        require(msg.sender != 0);
+        require(games[_game].player1 != 0);
+        require(games[_game].player2 == 0);
+        require(msg.sender != games[_game].player1);
         require(0 < _p2Move && _p2Move < 4);
+        require(games[_game].isP1Locked);
         require(msg.value >= games[_game].jackpot);
+        games[_game].player2 = msg.sender;
         games[_game].p2Move = _p2Move;
         games[_game].jackpot += msg.value;
+        games[_game].isP2Locked = true;
 
-        LogPlayer2(_game, msg.sender, msg.value);
+        LogPlayer(_game, msg.sender, msg.value);
         return true;
     }
 
@@ -90,9 +97,9 @@ contract RockPaperScissors {
     returns(bool sucess)
     {
         require(_game != 0);
-        require(games[_game].p2Move != 0); //if game moves change from 1,2,3 this will break
         require(0 < _p1Move && _p1Move < 4);
-        require(games[_game].p1HashedMove == helperHash(msg.sender, _p1Move, _p1Password));
+        require(games[_game].p1HashedMove == helperHash(games[_game].player1, _p1Move, _p1Password));
+        require(games[_game].isP1Locked && games[_game].isP2Locked);
         uint outcome = gameLogic[_p1Move - 1][games[_game].p2Move - 1];
         if (outcome == 0) {
             games[_game].p1Winnings = games[_game].jackpot / 2;
@@ -124,6 +131,7 @@ contract RockPaperScissors {
         if (games[_game].p1Winnings == (games[_game].jackpot / 2)) {
             games[_game].player1 = 0;
             games[_game].p1HashedMove = "";
+            games[_game].isP1Locked = false;
             games[_game].p1Winnings = 0;
         }
         if (games[_game].p1Winnings == games[_game].jackpot) {
@@ -145,6 +153,7 @@ contract RockPaperScissors {
         if (games[_game].p2Winnings == (games[_game].jackpot / 2)) {
             games[_game].player2 = 0;
             games[_game].p2Move = 0;
+            games[_game].isP2Locked = false;
             games[_game].p2Winnings = 0;
         }
         if (games[_game].p2Winnings == games[_game].jackpot) {
@@ -178,6 +187,8 @@ contract RockPaperScissors {
         games[_game].player2 = 0;
         games[_game].p1HashedMove = "";
         games[_game].p2Move = 0;
+        games[_game].isP1Locked = false;
+        games[_game].isP2Locked = false;
         games[_game].jackpot = 0;
         games[_game].p1Winnings = 0;
         games[_game].p2Winnings = 0;
