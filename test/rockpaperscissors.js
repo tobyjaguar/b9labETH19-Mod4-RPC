@@ -54,7 +54,7 @@ contract ('RockPaperScissors', function(accounts) {
     });
   });
 
-  it("Should add player 1", function() {
+  it("Should be able to create a game", function() {
     var gameNumber = 123;
     var player1Move = 1;
     var p1Password = "abc";
@@ -64,25 +64,27 @@ contract ('RockPaperScissors', function(accounts) {
     return contractInstance.helperHash.call(player1, player1Move, p1Password)
     .then(result => {
       p1HashedMove = result;
-      return contractInstance.player1(gameNumber, p1HashedMove, {from: player1, value: sendAmount});
+      return contractInstance.createGame(gameNumber, player2, p1HashedMove, {from: player1, value: sendAmount});
     })
     .then(result => {
-      assert.equal(result.receipt.status, true, "Player1 did not return true");
+      assert.equal(result.receipt.status, true, "createGame did not return true");
       assert.equal(result.logs[0].args.eGame, gameNumber, "Event did not return correct game");
-      assert.equal(result.logs[0].args.ePlayer, player1, "Event did not return correct player");
+      assert.equal(result.logs[0].args.ePlayer1, player1, "Event did not return correct player");
+      assert.equal(result.logs[0].args.ePlayer2, player2, "Event did not return correct player");
       assert.equal(result.logs[0].args.eJackpot, sendAmount, "Event did not return correct jackpot");
       return contractInstance.games.call(gameNumber, {from: owner});
     })
     .then(result => {
       assert.equal(result[0], player1, "Player1's address did not return correctly");
+      assert.equal(result[1], player2, "Player1's address did not return correctly");
       assert.equal(result[2], p1HashedMove, "Player1's move did not return correctly");
-      assert.equal(result[4], true, "Player1's isP1Locked did not return true");
-      assert.equal(result[6], sendAmount, "Jackpot did not return correctly");
+      assert.equal(result[4], sendAmount, "Jackpot did not return correctly");
+
     });
     //end test
   });
 
-  describe("Add two players", function() {
+  describe("Add player2 to the game", function() {
 
     var gameNumber = 123;
     var player1Move = 1;
@@ -95,10 +97,10 @@ contract ('RockPaperScissors', function(accounts) {
       return contractInstance.helperHash.call(player1, player1Move, p1Password)
       .then(result => {
         p1HashedMove = result;
-        return contractInstance.player1(gameNumber, p1HashedMove, {from: player1, value: sendAmount});
+        return contractInstance.createGame(gameNumber, player2, p1HashedMove, {from: player1, value: sendAmount});
       })
       .then(result => {
-        assert.equal(result.receipt.status, true, "Player1 did not return true");
+        assert.equal(result.receipt.status, true, "createGame did not return true");
       });
     })
 
@@ -108,15 +110,12 @@ contract ('RockPaperScissors', function(accounts) {
       .then(result => {
         assert.equal(result.receipt.status, true, "Player2 did not return true");
         assert.equal(result.logs[0].args.eGame, gameNumber, "Event did not return correct game");
-        assert.equal(result.logs[0].args.ePlayer, player2, "Event did not return correct player");
+        assert.equal(result.logs[0].args.ePlayer2, player2, "Event did not return correct player");
         assert.equal(result.logs[0].args.eJackpot, sendAmount, "Event did not return correct jackpot");
         return contractInstance.games.call(gameNumber, {from: owner});
       })
       .then(result => {
-        assert.equal(result[1], player2, "Player2's address did not return correctly");
         assert.equal(result[3], player2Move, "Player2's move did not return correctly");
-        assert.equal(result[5], true, "Player2's isP2Locked did not return true");
-        assert.equal(result[6], (sendAmount * 2), "Jackpot did not return correctly");
       });
     //end test
     });
@@ -135,19 +134,19 @@ contract ('RockPaperScissors', function(accounts) {
       return contractInstance.helperHash.call(player1, player1Move, p1Password)
       .then(result => {
         p1HashedMove = result;
-        return contractInstance.player1(gameNumber, p1HashedMove, {from: player1, value: sendAmount});
+        return contractInstance.createGame(gameNumber, player2, p1HashedMove, {from: player1, value: sendAmount});
       })
       .then(result => {
-        assert.equal(result.receipt.status, true, "Player1 did not return true");
+        assert.equal(result.receipt.status, true, "createGame did not return true");
         return contractInstance.player2(gameNumber, player2Move, {from: player2, value: sendAmount});
       })
       .then(result => {
-        assert.equal(result.receipt.status, true, "Player1 did not return true");
+        assert.equal(result.receipt.status, true, "Player2 did not return true");
       });
     })
 
     it("Should complete the game, Player 2 wins", function() {
-      return contractInstance.settleGame(gameNumber, player1Move, p1Password)
+      return contractInstance.settleGame(gameNumber, player1Move, p1Password, {from: player1})
       .then(result => {
         assert.equal(result.receipt.status, true, "settleGame did not return true");
         assert.equal(result.logs[0].args.eGame, gameNumber, "Event did not yield player 2 as the winner");
@@ -156,7 +155,7 @@ contract ('RockPaperScissors', function(accounts) {
         return contractInstance.games.call(gameNumber, {from: owner});
       })
       .then(result => {
-        assert.equal(result[8], (sendAmount * 2), "p2Winnings did not return the correct amount");
+        assert.equal(result[6], (sendAmount * 2), "p2Winnings did not return the correct amount");
       });
       //end test
     });
@@ -175,15 +174,15 @@ contract ('RockPaperScissors', function(accounts) {
       return contractInstance.helperHash.call(player1, player1Move, p1Password)
       .then(result => {
         p1HashedMove = result;
-        return contractInstance.player1(gameNumber, p1HashedMove, {from: player1, value: sendAmount});
+        return contractInstance.createGame(gameNumber, player2, p1HashedMove, {from: player1, value: sendAmount});
       })
       .then(result => {
-        assert.equal(result.receipt.status, true, "Player1 did not return true");
+        assert.equal(result.receipt.status, true, "createGame did not return true");
         return contractInstance.player2(gameNumber, player2Move, {from: player2, value: sendAmount});
       })
       .then(result => {
-        assert.equal(result.receipt.status, true, "Player1 did not return true");
-        return contractInstance.settleGame(gameNumber, player1Move, p1Password);
+        assert.equal(result.receipt.status, true, "Player2 did not return true");
+        return contractInstance.settleGame(gameNumber, player1Move, p1Password, {from: player1});
       })
       .then(result => {
         assert.equal(result.receipt.status, true, "settleGame did not return true");
@@ -247,15 +246,15 @@ contract ('RockPaperScissors', function(accounts) {
       return contractInstance.helperHash.call(player1, player1Move, p1Password)
       .then(result => {
         p1HashedMove = result;
-        return contractInstance.player1(gameNumber, p1HashedMove, {from: player1, value: sendAmount});
+        return contractInstance.createGame(gameNumber, player2, p1HashedMove, {from: player1, value: sendAmount});
       })
       .then(result => {
-        assert.equal(result.receipt.status, true, "Player1 did not return true");
+        assert.equal(result.receipt.status, true, "createGame did not return true");
         return contractInstance.player2(gameNumber, player2Move, {from: player2, value: sendAmount});
       })
       .then(result => {
         assert.equal(result.receipt.status, true, "Player2 did not return true");
-        return contractInstance.settleGame(gameNumber, player1Move, p1Password);
+        return contractInstance.settleGame(gameNumber, player1Move, p1Password, {from: player1});
       })
       .then(result => {
         assert.equal(result.receipt.status, true, "settleGame did not return true");
@@ -285,11 +284,13 @@ contract ('RockPaperScissors', function(accounts) {
         return web3.eth.getBalancePromise(player1);
       })
       .then(balanceNow => {
+        /*
         console.log(
           "Balance Now: " + balanceNow + "\n" +
           "Balance Before: " + balanceBefore + "\n" +
           "Balance eq: " + balanceBefore.plus(sendAmount).minus(txFee)
         );
+        */
         //why doesn't this equate without the toString(10)???
         assert.equal(balanceNow.toString(10), balanceBefore.plus(sendAmount).minus(txFee).toString(10), "Player1's balance did not return correctly");
       });
@@ -346,10 +347,8 @@ contract ('RockPaperScissors', function(accounts) {
         assert.equal(result[1], 0, "Player 2 did not return 0");
         assert.equal(result[2], 0, "Player 1's hashedMove did not return 0");
         assert.equal(result[3], 0, "Player 2's move did not return 0");
-        assert.equal(result[4], false, "Player 1's lock did not return 0");
-        assert.equal(result[5], false, "Player 2's lock did not return 0");
-        assert.equal(result[7], 0, "Player 1's winnings did not return 0");
-        assert.equal(result[8], 0, "Player 2's winnings did not return 0");
+        assert.equal(result[5], 0, "Player 1's winnings did not return 0");
+        assert.equal(result[6], 0, "Player 2's winnings did not return 0");
       });
       //end test
     });
@@ -370,7 +369,7 @@ contract ('RockPaperScissors', function(accounts) {
       return contractInstance.helperHash.call(player1, player1Move, p1Password)
       .then(result => {
         p1HashedMove = result;
-        return contractInstance.player1(gameNumber, p1HashedMove, {from: player1, value: sendAmount});
+        return contractInstance.createGame(gameNumber, player2, p1HashedMove, {from: player1, value: sendAmount});
       })
       .then(result => {
         assert.equal(result.receipt.status, true, "Player1 did not return true");

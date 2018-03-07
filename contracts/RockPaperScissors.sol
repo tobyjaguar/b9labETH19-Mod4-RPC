@@ -65,7 +65,7 @@ contract RockPaperScissors {
         games[_game].p1HashedMove = _hashedMove;
         games[_game].jackpot = msg.value;
 
-        LogGameCreated(_game, _player1, _player2, msg.value);
+        LogGameCreated(_game, msg.sender, _player2, msg.value);
         return true;
 
     }
