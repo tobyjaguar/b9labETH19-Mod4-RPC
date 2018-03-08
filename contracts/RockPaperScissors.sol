@@ -16,13 +16,12 @@ contract RockPaperScissors {
         bytes32 p1HashedMove;
         uint8 p2Move;
         uint256 jackpot;
-        uint256 p1Winnings;
-        uint256 p2Winnings;
     }
 
     mapping(uint256 => Game) public games;
+    mapping(address => uint256) public winnings;
 
-    uint8[3][3] public gameLogic;
+    uint8[4][4] public gameLogic;
 
     event LogGameCreated(uint256 eGame, address ePlayer1, address ePlayer2, uint256 eJackpot);
     event LogPlayer2(uint256 eGame, address ePlayer2, uint256 eJackpot);
@@ -35,9 +34,9 @@ contract RockPaperScissors {
     {
         owner = msg.sender;
         deadline = block.number + _expirationTime;
-        gameLogic[0] = [0, 2, 1];
-        gameLogic[1] = [1, 0, 2];
-        gameLogic[2] = [2, 1, 0];
+        gameLogic[1] = [0, 0, 2, 1];
+        gameLogic[2] = [0, 1, 0, 2];
+        gameLogic[3] = [0, 2, 1, 0];
     }
 
     function helperHash(address _player, uint8 _move, bytes32 _unHashedPassword)
@@ -77,9 +76,8 @@ contract RockPaperScissors {
     {
         require(msg.sender == games[_game].player2);
         require(0 < _p2Move && _p2Move < 4);
-        require(msg.value >= games[_game].jackpot);
+        require(msg.value == games[_game].jackpot);
         games[_game].p2Move = _p2Move;
-        games[_game].jackpot += msg.value;
 
         LogPlayer2(_game, msg.sender, msg.value);
         return true;
@@ -87,68 +85,47 @@ contract RockPaperScissors {
 
     function settleGame(uint256 _game, uint8 _p1Move, bytes32 _p1Password)
     public
-    returns(bool sucess)
+    returns(bool hasWinner)
     {
         require(_game != 0);
-        require(games[_game].p2Move != 0); //if game moves change from 1,2,3 this will break
+        require(games[_game].p2Move != 0);
         require(0 < _p1Move && _p1Move < 4);
         require(games[_game].p1HashedMove == helperHash(msg.sender, _p1Move, _p1Password));
-        uint outcome = gameLogic[_p1Move - 1][games[_game].p2Move - 1];
+        uint outcome = gameLogic[_p1Move][games[_game].p2Move];
         if (outcome == 0) {
-            games[_game].p1Winnings = games[_game].jackpot / 2;
-            games[_game].p2Winnings = games[_game].jackpot / 2;
+            winnings[games[_game].player1] = games[_game].jackpot;
+            winnings[games[_game].player2] = games[_game].jackpot;
             LogWinner(_game, 0x0, 0);
             return false;
         }
         if (outcome == 1) {
             //player 1 wins
-            games[_game].p1Winnings = games[_game].jackpot;
-            LogWinner(_game, games[_game].player1, games[_game].jackpot);
+            winnings[games[_game].player1] = (games[_game].jackpot * 2);
+            LogWinner(_game, games[_game].player1, (games[_game].jackpot * 2));
             return true;
         }
         if (outcome == 2) {
           //player 2 wins
-            games[_game].p2Winnings = games[_game].jackpot;
-            LogWinner(_game, games[_game].player2, games[_game].jackpot);
+            winnings[games[_game].player2] = (games[_game].jackpot * 2);
+            LogWinner(_game, games[_game].player2, (games[_game].jackpot * 2));
             return true;
         }
     }
 
-    function withdrawPlayer1(uint256 _game)
+    function withdraw(uint256 _game)
     public
     returns(bool success)
     {
-        require(games[_game].player1 == msg.sender);
-        uint256 amountToSend = games[_game].p1Winnings;
+        uint256 amountToSend = winnings[msg.sender];
         require(amountToSend != 0);
-        if (games[_game].p1Winnings == (games[_game].jackpot / 2)) {
+        winnings[msg.sender] = 0;
+        if (games[_game].player1 == msg.sender) {
             games[_game].player1 = 0;
             games[_game].p1HashedMove = "";
-            games[_game].p1Winnings = 0;
         }
-        if (games[_game].p1Winnings == games[_game].jackpot) {
-            resetGame(_game);
-        }
-        msg.sender.transfer(amountToSend);
-
-        LogWithdraw(_game, msg.sender, amountToSend);
-        return true;
-    }
-
-    function withdrawPlayer2(uint256 _game)
-    public
-    returns(bool success)
-    {
-        require(games[_game].player2 == msg.sender);
-        uint256 amountToSend = games[_game].p2Winnings;
-        require(amountToSend != 0);
-        if (games[_game].p2Winnings == (games[_game].jackpot / 2)) {
+        if (games[_game].player2 == msg.sender) {
             games[_game].player2 = 0;
             games[_game].p2Move = 0;
-            games[_game].p2Winnings = 0;
-        }
-        if (games[_game].p2Winnings == games[_game].jackpot) {
-            resetGame(_game);
         }
         msg.sender.transfer(amountToSend);
 
@@ -160,14 +137,22 @@ contract RockPaperScissors {
     public
     returns(bool success)
     {
-        require(games[_game].player2 == msg.sender);
         require(deadline <= block.number);
-        uint256 amountToSend = games[_game].jackpot;
-        require(amountToSend != 0);
+        require(games[_game].jackpot != 0);
+        uint256 amountToSend;
+        address receiver;
+        if (games[_game].p2Move == 0) {
+            receiver = games[_game].player1;
+            amountToSend = games[_game].jackpot;
+            games[_game].jackpot = 0;
+        } else {
+            receiver = games[_game].player2;
+            amountToSend = (games[_game].jackpot * 2);
+            games[_game].jackpot = 0;
+        }
         resetGame(_game);
-        msg.sender.transfer(amountToSend);
-
         LogForfeit(_game, msg.sender, amountToSend);
+        receiver.transfer(amountToSend);
         return true;
     }
 
@@ -178,9 +163,6 @@ contract RockPaperScissors {
         games[_game].player2 = 0;
         games[_game].p1HashedMove = "";
         games[_game].p2Move = 0;
-        games[_game].jackpot = 0;
-        games[_game].p1Winnings = 0;
-        games[_game].p2Winnings = 0;
     }
 
 }
