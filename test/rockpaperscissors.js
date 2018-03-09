@@ -41,6 +41,19 @@ contract ('RockPaperScissors', function(accounts) {
     });
   });
 
+  it("Should be able to change expiration time", function() {
+    var newExirpation = 1;
+    return contractInstance.changeExpiration(newExirpation, {from: owner})
+    .then(result => {
+      assert.equal(result.receipt.status, true, "changeExpiration did not return true");
+      return contractInstance.expiration.call({from: owner});
+    })
+    .then(result => {
+      assert.strictEqual(result.valueOf(), newExirpation.toString(10), "expiration did not return correctly");
+    });
+    //end test
+  });
+
   it("Should be able to create a game", function() {
     var gameNumber = 123;
     var player1Move = 1;
@@ -84,6 +97,7 @@ contract ('RockPaperScissors', function(accounts) {
     var player2Move = 2;
     var p1Password = "abc";
     var p1HashedMove;
+    var blockNumber;
     var sendAmount = web3.toWei(1, "ether");
 
     beforeEach(function() {
@@ -102,17 +116,201 @@ contract ('RockPaperScissors', function(accounts) {
         assert.strictEqual(result.logs[0].args.eGame.valueOf(), gameNumber.toString(10), "Event did not return correct game");
         assert.strictEqual(result.logs[0].args.ePlayer2, player2, "Event did not return correct player");
         assert.strictEqual(result.logs[0].args.eJackpot.valueOf(), sendAmount.toString(10), "Event did not return correct jackpot");
+        return web3.eth.getBlockNumberPromise();
+      })
+      .then(block => {
+        blockNumber = block;
         return contractInstance.games.call(gameNumber, {from: owner});
       })
       .then(result => {
         assert.strictEqual(result[3].valueOf(), player2Move.toString(10), "Player2's move did not return correctly");
+        assert.strictEqual(result[5].valueOf(), (blockNumber + blockExpiration).toString(10), "Game's deadline did not return correctly");
       });
     //end test
     });
+
     //end describe
   });
 
-  describe("let player 2 win", function() {
+  describe("Player 1: Rock, Player 2: Scissors, Player 1 wins", function() {
+    var gameNumber = 123;
+    var player1Move = 1;
+    var player2Move = 3;
+    var p1Password = "abc";
+    var p1HashedMove;
+    var sendAmount = web3.toWei(1, "ether");
+
+    beforeEach(function() {
+      return contractInstance.helperHash.call(player1, player1Move, p1Password)
+      .then(result => {
+        p1HashedMove = result;
+        return contractInstance.createGame(gameNumber, player2, p1HashedMove, {from: player1, value: sendAmount});
+      })
+      .then(result => {
+        assert.equal(result.receipt.status, true, "createGame did not return true");
+        return contractInstance.player2(gameNumber, player2Move, {from: player2, value: sendAmount});
+      });
+    })
+
+    it("Should complete the game, Player 1 wins", function() {
+      return contractInstance.settleGame(gameNumber, player1Move, p1Password, {from: player1})
+      .then(result => {
+        assert.equal(result.receipt.status, true, "settleGame did not return true");
+        assert.strictEqual(result.logs[0].args.eGame.valueOf(), gameNumber.toString(10), "Event did not yield player 2 as the winner");
+        assert.strictEqual(result.logs[0].args.eWinner, player1, "Event did not yield player 1 as the winner");
+        assert.strictEqual(result.logs[0].args.eAmount.valueOf(), (sendAmount *2).toString(10), "Event did not return correct amount");
+        return contractInstance.winnings.call(player1, {from: owner});
+      })
+      .then(result => {
+        assert.strictEqual(result.valueOf(), (sendAmount * 2).toString(10), "player2's winnings did not return the correct amount");
+        return contractInstance.games.call(gameNumber, {from: owner});
+      })
+      .then(result => {
+        console.log(
+          "In the case of a tie, the jackpot is not reset during this game." + "\n" +
+          "It will be reset when the first player starts another game with the same game number." + "\n" +
+          "Jackpot: " + result[4]
+        );
+        assert.strictEqual(result[0], "0x0000000000000000000000000000000000000000", "Player 1 did not return 0");
+        assert.strictEqual(result[1], "0x0000000000000000000000000000000000000000", "Player 2 did not return 0");
+        assert.strictEqual(result[2], "0x0000000000000000000000000000000000000000000000000000000000000000", "Player 1's hashedMove did not return 0");
+        assert.strictEqual(result[3].valueOf(), "0", "Player 1's move did not return 0");
+      });
+      //end test
+    });
+
+    //end describe
+  });
+
+  describe("Player 1: Paper, Player 2: Rock, Player 1 wins", function() {
+    var gameNumber = 123;
+    var player1Move = 2;
+    var player2Move = 1;
+    var p1Password = "abc";
+    var p1HashedMove;
+    var sendAmount = web3.toWei(1, "ether");
+
+    beforeEach(function() {
+      return contractInstance.helperHash.call(player1, player1Move, p1Password)
+      .then(result => {
+        p1HashedMove = result;
+        return contractInstance.createGame(gameNumber, player2, p1HashedMove, {from: player1, value: sendAmount});
+      })
+      .then(result => {
+        assert.equal(result.receipt.status, true, "createGame did not return true");
+        return contractInstance.player2(gameNumber, player2Move, {from: player2, value: sendAmount});
+      });
+    })
+
+    it("Should complete the game, Player 1 wins", function() {
+      return contractInstance.settleGame(gameNumber, player1Move, p1Password, {from: player1})
+      .then(result => {
+        assert.equal(result.receipt.status, true, "settleGame did not return true");
+        assert.strictEqual(result.logs[0].args.eGame.valueOf(), gameNumber.toString(10), "Event did not yield player 2 as the winner");
+        assert.strictEqual(result.logs[0].args.eWinner, player1, "Event did not yield player 1 as the winner");
+        assert.strictEqual(result.logs[0].args.eAmount.valueOf(), (sendAmount *2).toString(10), "Event did not return correct amount");
+        return contractInstance.winnings.call(player1, {from: owner});
+      })
+      .then(result => {
+        assert.strictEqual(result.valueOf(), (sendAmount * 2).toString(10), "player1's winnings did not return the correct amount");
+        return contractInstance.games.call(gameNumber, {from: owner});
+      });
+      //end test
+    });
+
+    //end describe
+  });
+
+  describe("Player 1: Scissors, Player 2: Paper, Player 1 wins", function() {
+    var gameNumber = 123;
+    var player1Move = 3;
+    var player2Move = 2;
+    var p1Password = "abc";
+    var p1HashedMove;
+    var sendAmount = web3.toWei(1, "ether");
+
+    beforeEach(function() {
+      return contractInstance.helperHash.call(player1, player1Move, p1Password)
+      .then(result => {
+        p1HashedMove = result;
+        return contractInstance.createGame(gameNumber, player2, p1HashedMove, {from: player1, value: sendAmount});
+      })
+      .then(result => {
+        assert.equal(result.receipt.status, true, "createGame did not return true");
+        return contractInstance.player2(gameNumber, player2Move, {from: player2, value: sendAmount});
+      });
+    })
+
+    it("Should complete the game, Player 1 wins", function() {
+      return contractInstance.settleGame(gameNumber, player1Move, p1Password, {from: player1})
+      .then(result => {
+        assert.equal(result.receipt.status, true, "settleGame did not return true");
+        assert.strictEqual(result.logs[0].args.eGame.valueOf(), gameNumber.toString(10), "Event did not yield player 2 as the winner");
+        assert.strictEqual(result.logs[0].args.eWinner, player1, "Event did not yield player 1 as the winner");
+        assert.strictEqual(result.logs[0].args.eAmount.valueOf(), (sendAmount *2).toString(10), "Event did not return correct amount");
+        return contractInstance.winnings.call(player1, {from: owner});
+      })
+      .then(result => {
+        assert.strictEqual(result.valueOf(), (sendAmount * 2).toString(10), "player1's winnings did not return the correct amount");
+        return contractInstance.games.call(gameNumber, {from: owner});
+      });
+      //end test
+    });
+
+    //end describe
+  });
+
+  describe("Player 2: Rock, Player 1: Scissors, Player 2 wins", function() {
+    var gameNumber = 123;
+    var player1Move = 3;
+    var player2Move = 1;
+    var p1Password = "abc";
+    var p1HashedMove;
+    var sendAmount = web3.toWei(1, "ether");
+
+    beforeEach(function() {
+      return contractInstance.helperHash.call(player1, player1Move, p1Password)
+      .then(result => {
+        p1HashedMove = result;
+        return contractInstance.createGame(gameNumber, player2, p1HashedMove, {from: player1, value: sendAmount});
+      })
+      .then(result => {
+        assert.equal(result.receipt.status, true, "createGame did not return true");
+        return contractInstance.player2(gameNumber, player2Move, {from: player2, value: sendAmount});
+      });
+    })
+
+    it("Should complete the game, Player 2 wins", function() {
+      return contractInstance.settleGame(gameNumber, player1Move, p1Password, {from: player1})
+      .then(result => {
+        assert.equal(result.receipt.status, true, "settleGame did not return true");
+        assert.strictEqual(result.logs[0].args.eGame.valueOf(), gameNumber.toString(10), "Event did not yield player 2 as the winner");
+        assert.strictEqual(result.logs[0].args.eWinner, player2, "Event did not yield player 2 as the winner");
+        assert.strictEqual(result.logs[0].args.eAmount.valueOf(), (sendAmount *2).toString(10), "Event did not return correct amount");
+        return contractInstance.winnings.call(player2, {from: owner});
+      })
+      .then(result => {
+        assert.strictEqual(result.valueOf(), (sendAmount * 2).toString(10), "player2's winnings did not return the correct amount");
+        return contractInstance.games.call(gameNumber, {from: owner});
+      })
+      .then(result => {
+        console.log(
+          "In the case of a tie, the jackpot is not reset during this game." + "\n" +
+          "It will be reset when the first player starts another game with the same game number." + "\n" +
+          "Jackpot: " + result[4]
+        );
+        assert.strictEqual(result[0], "0x0000000000000000000000000000000000000000", "Player 1 did not return 0");
+        assert.strictEqual(result[1], "0x0000000000000000000000000000000000000000", "Player 2 did not return 0");
+        assert.strictEqual(result[2], "0x0000000000000000000000000000000000000000000000000000000000000000", "Player 1's hashedMove did not return 0");
+        assert.strictEqual(result[3].valueOf(), "0", "Player 2's move did not return 0");
+      });
+      //end test
+    });
+
+    //end describe
+  });
+
+  describe("Player 2: Paper, Player 1: Rock, Player 2 wins", function() {
     var gameNumber = 123;
     var player1Move = 1;
     var player2Move = 2;
@@ -144,21 +342,49 @@ contract ('RockPaperScissors', function(accounts) {
       .then(result => {
         assert.strictEqual(result.valueOf(), (sendAmount * 2).toString(10), "player2's winnings did not return the correct amount");
         return contractInstance.games.call(gameNumber, {from: owner});
-      })
-        .then(result => {
-          console.log(
-            "In the case of a tie, the jackpot is not reset during this game." + "\n" +
-            "It will be reset when the first player starts another game with the same game number." + "\n" +
-            "Jackpot: " + result[4]
-          );
-          assert.strictEqual(result[0], "0x0000000000000000000000000000000000000000", "Player 1 did not return 0");
-          assert.strictEqual(result[1], "0x0000000000000000000000000000000000000000", "Player 2 did not return 0");
-          assert.strictEqual(result[2], "0x0000000000000000000000000000000000000000000000000000000000000000", "Player 1's hashedMove did not return 0");
-          assert.strictEqual(result[3].valueOf(), "0", "Player 2's move did not return 0");
       });
       //end test
     });
-    
+
+    //end describe
+  });
+
+  describe("Player 2: Scissors, Player 1: Paper, Player 2 wins", function() {
+    var gameNumber = 123;
+    var player1Move = 2;
+    var player2Move = 3;
+    var p1Password = "abc";
+    var p1HashedMove;
+    var sendAmount = web3.toWei(1, "ether");
+
+    beforeEach(function() {
+      return contractInstance.helperHash.call(player1, player1Move, p1Password)
+      .then(result => {
+        p1HashedMove = result;
+        return contractInstance.createGame(gameNumber, player2, p1HashedMove, {from: player1, value: sendAmount});
+      })
+      .then(result => {
+        assert.equal(result.receipt.status, true, "createGame did not return true");
+        return contractInstance.player2(gameNumber, player2Move, {from: player2, value: sendAmount});
+      });
+    })
+
+    it("Should complete the game, Player 2 wins", function() {
+      return contractInstance.settleGame(gameNumber, player1Move, p1Password, {from: player1})
+      .then(result => {
+        assert.equal(result.receipt.status, true, "settleGame did not return true");
+        assert.strictEqual(result.logs[0].args.eGame.valueOf(), gameNumber.toString(10), "Event did not yield player 2 as the winner");
+        assert.strictEqual(result.logs[0].args.eWinner, player2, "Event did not yield player 2 as the winner");
+        assert.strictEqual(result.logs[0].args.eAmount.valueOf(), (sendAmount *2).toString(10), "Event did not return correct amount");
+        return contractInstance.winnings.call(player2, {from: owner});
+      })
+      .then(result => {
+        assert.strictEqual(result.valueOf(), (sendAmount * 2).toString(10), "player2's winnings did not return the correct amount");
+        return contractInstance.games.call(gameNumber, {from: owner});
+      });
+      //end test
+    });
+
     //end describe
   });
 
@@ -226,7 +452,7 @@ contract ('RockPaperScissors', function(accounts) {
     //end describe
   });
 
-  describe("when players tie", function() {
+  describe("when players tie with Rock", function() {
     var gameNumber = 123;
     var player1Move = 1;
     var player2Move = 1;
@@ -322,9 +548,9 @@ contract ('RockPaperScissors', function(accounts) {
     //end describe
   });
 
-  describe("when player 1 forfeits", function() {
+  describe("when players tie with Paper", function() {
     var gameNumber = 123;
-    var player1Move = 1;
+    var player1Move = 2;
     var player2Move = 2;
     var p1Password = "abc";
     var p1HashedMove;
@@ -340,25 +566,188 @@ contract ('RockPaperScissors', function(accounts) {
         return contractInstance.player2(gameNumber, player2Move, {from: player2, value: sendAmount});
       })
       .then(result => {
-        //Player 1 doesn't settle the game
-        //advance block count
-        return web3.eth.sendTransaction({from: owner, to: player1, value: 1});
+        return contractInstance.settleGame(gameNumber, player1Move, p1Password, {from: player1});
+      });
+    })
+
+    it("Should be able to withdraw player1's share", function() {
+      var hash;
+      var gasUsed = 0;
+      var gasPrice = 0;
+      var txFee;
+      var balanceBefore;
+
+      return contractInstance.winnings.call(player1, {from: owner})
+      .then(result => {
+        assert.strictEqual(result.valueOf(), sendAmount, "Player1's winnings did not return correctly");
+        return web3.eth.getBalancePromise(player1);
+      })
+      .then(balance => {
+        balanceBefore = balance;
+        return contractInstance.withdraw({from: player1});
+      })
+      .then(txObj => {
+        assert.equal(txObj.receipt.status, true, "withdrawPlayer1 did not return true");
+        gasUsed = txObj.receipt.gasUsed;
+        return web3.eth.getTransactionPromise(txObj.tx);
       })
       .then(tx => {
-        console.log(
-          "Advance the block count past deadline of the game..." + "\n" +
-          "Transaction #1: " + tx
-        );
-        return web3.eth.sendTransaction({from: owner, to: player1, value: 1});
+        gasPrice = tx.gasPrice;
+        txFee = gasUsed * gasPrice;
+        return web3.eth.getBalancePromise(player1);
       })
-      .then(tx => {
-        console.log("Transaction #2: " + tx);
-        return web3.eth.sendTransaction({from: owner, to: player1, value: 1});
-      })
-      .then(tx => {
-      console.log("Transaction #3: " + tx);
+      .then(balanceNow => {
+        assert.strictEqual(balanceNow.toString(10), balanceBefore.plus(sendAmount).minus(txFee).toString(10), "Player1's balance did not return correctly");
+      });
+      //end test
     });
-  })
+
+    it("Should be able to withdraw player2's share", function() {
+      var hash;
+      var gasUsed = 0;
+      var gasPrice = 0;
+      var txFee;
+      var balanceBefore;
+
+      return contractInstance.winnings.call(player2, {from: owner})
+      .then(result => {
+        assert.strictEqual(result.valueOf(), sendAmount, "Player2's winnings did not return correctly");
+        return web3.eth.getBalancePromise(player2);
+      })
+      .then(balance => {
+        balanceBefore = balance;
+        return contractInstance.withdraw({from: player2});
+      })
+      .then(txObj => {
+        assert.equal(txObj.receipt.status, true, "withdrawPlayer2 did not return true");
+        gasUsed = txObj.receipt.gasUsed;
+        return web3.eth.getTransactionPromise(txObj.tx);
+      })
+      .then(tx => {
+        gasPrice = tx.gasPrice;
+        txFee = gasUsed * gasPrice;
+        return web3.eth.getBalancePromise(player2);
+      })
+      .then(balanceNow => {
+        assert.strictEqual(balanceNow.toString(10), balanceBefore.plus(sendAmount).minus(txFee).toString(10), "Player2's balance did not return correctly");
+      });
+      //end test
+    });
+
+    //end describe
+  });
+
+  describe("when players tie with Scissors", function() {
+    var gameNumber = 123;
+    var player1Move = 3;
+    var player2Move = 3;
+    var p1Password = "abc";
+    var p1HashedMove;
+    var sendAmount = web3.toWei(1, "ether");
+
+    beforeEach(function() {
+      return contractInstance.helperHash.call(player1, player1Move, p1Password)
+      .then(result => {
+        p1HashedMove = result;
+        return contractInstance.createGame(gameNumber, player2, p1HashedMove, {from: player1, value: sendAmount});
+      })
+      .then(result => {
+        return contractInstance.player2(gameNumber, player2Move, {from: player2, value: sendAmount});
+      })
+      .then(result => {
+        return contractInstance.settleGame(gameNumber, player1Move, p1Password, {from: player1});
+      });
+    })
+
+    it("Should be able to withdraw player1's share", function() {
+      var hash;
+      var gasUsed = 0;
+      var gasPrice = 0;
+      var txFee;
+      var balanceBefore;
+
+      return contractInstance.winnings.call(player1, {from: owner})
+      .then(result => {
+        assert.strictEqual(result.valueOf(), sendAmount, "Player1's winnings did not return correctly");
+        return web3.eth.getBalancePromise(player1);
+      })
+      .then(balance => {
+        balanceBefore = balance;
+        return contractInstance.withdraw({from: player1});
+      })
+      .then(txObj => {
+        assert.equal(txObj.receipt.status, true, "withdrawPlayer1 did not return true");
+        gasUsed = txObj.receipt.gasUsed;
+        return web3.eth.getTransactionPromise(txObj.tx);
+      })
+      .then(tx => {
+        gasPrice = tx.gasPrice;
+        txFee = gasUsed * gasPrice;
+        return web3.eth.getBalancePromise(player1);
+      })
+      .then(balanceNow => {
+        assert.strictEqual(balanceNow.toString(10), balanceBefore.plus(sendAmount).minus(txFee).toString(10), "Player1's balance did not return correctly");
+      });
+      //end test
+    });
+
+    it("Should be able to withdraw player2's share", function() {
+      var hash;
+      var gasUsed = 0;
+      var gasPrice = 0;
+      var txFee;
+      var balanceBefore;
+
+      return contractInstance.winnings.call(player2, {from: owner})
+      .then(result => {
+        assert.strictEqual(result.valueOf(), sendAmount, "Player2's winnings did not return correctly");
+        return web3.eth.getBalancePromise(player2);
+      })
+      .then(balance => {
+        balanceBefore = balance;
+        return contractInstance.withdraw({from: player2});
+      })
+      .then(txObj => {
+        assert.equal(txObj.receipt.status, true, "withdrawPlayer2 did not return true");
+        gasUsed = txObj.receipt.gasUsed;
+        return web3.eth.getTransactionPromise(txObj.tx);
+      })
+      .then(tx => {
+        gasPrice = tx.gasPrice;
+        txFee = gasUsed * gasPrice;
+        return web3.eth.getBalancePromise(player2);
+      })
+      .then(balanceNow => {
+        assert.strictEqual(balanceNow.toString(10), balanceBefore.plus(sendAmount).minus(txFee).toString(10), "Player2's balance did not return correctly");
+      });
+      //end test
+    });
+
+    //end describe
+  });
+
+  describe("when player 1 forfeits", function() {
+    var gameNumber = 123;
+    var player1Move = 1;
+    var player2Move = 2;
+    var p1Password = "abc";
+    var p1HashedMove;
+    var newExirpation = 1;
+    var sendAmount = web3.toWei(1, "ether");
+
+    beforeEach(function() {
+      return contractInstance.changeExpiration(newExirpation, {from: owner})
+      .then(() => {
+        return contractInstance.helperHash.call(player1, player1Move, p1Password);
+      })
+      .then(result => {
+        p1HashedMove = result;
+        return contractInstance.createGame(gameNumber, player2, p1HashedMove, {from: player1, value: sendAmount});
+      })
+      .then(result => {
+        return contractInstance.player2(gameNumber, player2Move, {from: player2, value: sendAmount});
+      });
+    })
 
     it("Should allow for player2 to withdraw via forfeit", function() {
       var hash;

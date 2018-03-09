@@ -40,6 +40,15 @@ contract RockPaperScissors {
         gameLogic[3] = [0, 3, 2, 1];
     }
 
+    function changeExpiration(uint256 _expirationTime)
+    public
+    returns(bool success)
+    {
+        require(msg.sender == owner);
+        expiration = _expirationTime;
+        return true;
+    }
+
     function helperHash(address _player, uint8 _move, bytes32 _unHashedPassword)
     public
     constant
@@ -59,6 +68,7 @@ contract RockPaperScissors {
         require(msg.sender != 0);
         require(_game != 0);
         require(msg.value > 0);
+        require(games[_game].p2Move == 0);
 
         games[_game].player1 = msg.sender;
         games[_game].player2 = _player2;
@@ -79,6 +89,7 @@ contract RockPaperScissors {
         require(msg.sender == games[_game].player2);
         require(0 < _p2Move && _p2Move < 4);
         require(msg.value == games[_game].jackpot);
+        games[_game].deadline = block.number + expiration;
         games[_game].p2Move = _p2Move;
 
         LogPlayer2(_game, msg.sender, msg.value);
@@ -87,33 +98,29 @@ contract RockPaperScissors {
 
     function settleGame(uint256 _game, uint8 _p1Move, bytes32 _p1Password)
     public
-    returns(bool hasWinner)
+    returns(bool complete)
     {
         require(_game != 0);
         require(games[_game].p2Move != 0);
         require(0 < _p1Move && _p1Move < 4);
         require(games[_game].p1HashedMove == helperHash(msg.sender, _p1Move, _p1Password));
         uint outcome = gameLogic[_p1Move][games[_game].p2Move];
+        require(outcome > 0 && outcome < 4);
         if (outcome == 2) {
             //player 1 wins
             winnings[games[_game].player1] += games[_game].jackpot * 2;
             LogWinner(_game, games[_game].player1, games[_game].jackpot * 2);
-            resetGame(_game);
-            return true;
-        }
-        if (outcome == 3) {
+        } else if (outcome == 3) {
           //player 2 wins
             winnings[games[_game].player2] += games[_game].jackpot * 2;
             LogWinner(_game, games[_game].player2, games[_game].jackpot * 2);
-            resetGame(_game);
-            return true;
         } else {
             winnings[games[_game].player1] += games[_game].jackpot;
             winnings[games[_game].player2] += games[_game].jackpot;
             LogWinner(_game, 0x0, 0);
-            resetGame(_game);
-            return false;
         }
+        resetGame(_game);
+        return true;
     }
 
     function withdraw()
@@ -140,11 +147,9 @@ contract RockPaperScissors {
         if (games[_game].p2Move == 0) {
             receiver = games[_game].player1;
             forfeitAmount = games[_game].jackpot;
-            games[_game].jackpot = 0;
         } else {
             receiver = games[_game].player2;
             forfeitAmount = games[_game].jackpot * 2;
-            games[_game].jackpot = 0;
         }
         resetGame(_game);
         winnings[receiver] += forfeitAmount;
@@ -159,6 +164,7 @@ contract RockPaperScissors {
         games[_game].player2 = 0;
         games[_game].p1HashedMove = "";
         games[_game].p2Move = 0;
+        games[_game].jackpot = 0;
     }
 
 }
