@@ -36,7 +36,7 @@ contract RockPaperScissors {
         owner = msg.sender;
         expiration = _expirationTime;
         gameLogic[1] = [0, 1, 3, 2];
-        gameLogic[2] = [0, 0, 1, 3];
+        gameLogic[2] = [0, 2, 1, 3];
         gameLogic[3] = [0, 3, 2, 1];
     }
 
@@ -94,26 +94,25 @@ contract RockPaperScissors {
         require(0 < _p1Move && _p1Move < 4);
         require(games[_game].p1HashedMove == helperHash(msg.sender, _p1Move, _p1Password));
         uint outcome = gameLogic[_p1Move][games[_game].p2Move];
-        if (outcome == 1) {
-            winnings[games[_game].player1] = games[_game].jackpot;
-            winnings[games[_game].player2] = games[_game].jackpot;
-            LogWinner(_game, 0x0, 0);
-            resetGame(_game);
-            return false;
-        }
         if (outcome == 2) {
             //player 1 wins
-            winnings[games[_game].player1] = games[_game].jackpot * 2;
+            winnings[games[_game].player1] += games[_game].jackpot * 2;
             LogWinner(_game, games[_game].player1, games[_game].jackpot * 2);
             resetGame(_game);
             return true;
         }
         if (outcome == 3) {
           //player 2 wins
-            winnings[games[_game].player2] = games[_game].jackpot * 2;
+            winnings[games[_game].player2] += games[_game].jackpot * 2;
             LogWinner(_game, games[_game].player2, games[_game].jackpot * 2);
             resetGame(_game);
             return true;
+        } else {
+            winnings[games[_game].player1] += games[_game].jackpot;
+            winnings[games[_game].player2] += games[_game].jackpot;
+            LogWinner(_game, 0x0, 0);
+            resetGame(_game);
+            return false;
         }
     }
 
