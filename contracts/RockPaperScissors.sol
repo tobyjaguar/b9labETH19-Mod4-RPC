@@ -97,22 +97,22 @@ contract RockPaperScissors {
         if (outcome == 1) {
             winnings[games[_game].player1] = games[_game].jackpot;
             winnings[games[_game].player2] = games[_game].jackpot;
-            resetGame(_game);
             LogWinner(_game, 0x0, 0);
+            resetGame(_game);
             return false;
         }
         if (outcome == 2) {
             //player 1 wins
             winnings[games[_game].player1] = games[_game].jackpot * 2;
-            resetGame(_game);
             LogWinner(_game, games[_game].player1, games[_game].jackpot * 2);
+            resetGame(_game);
             return true;
         }
         if (outcome == 3) {
           //player 2 wins
             winnings[games[_game].player2] = games[_game].jackpot * 2;
-            resetGame(_game);
             LogWinner(_game, games[_game].player2, games[_game].jackpot * 2);
+            resetGame(_game);
             return true;
         }
     }
