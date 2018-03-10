@@ -24,6 +24,7 @@ contract RockPaperScissors {
 
     uint8[4][4] public gameLogic;
 
+    event LogExpirationChange(uint256 eBlockExpiration);
     event LogGameCreated(uint256 eGame, address ePlayer1, address ePlayer2, uint256 eJackpot);
     event LogPlayer2(uint256 eGame, address ePlayer2, uint256 eJackpot);
     event LogWinner(uint256 eGame, address eWinner, uint256 eAmount);
@@ -46,6 +47,8 @@ contract RockPaperScissors {
     {
         require(msg.sender == owner);
         expiration = _expirationTime;
+
+        LogExpirationChange(_expirationTime);
         return true;
     }
 
@@ -68,7 +71,7 @@ contract RockPaperScissors {
         require(msg.sender != 0);
         require(_game != 0);
         require(msg.value > 0);
-        require(games[_game].p2Move == 0);
+        require(games[_game].deadline == 0);
 
         games[_game].player1 = msg.sender;
         games[_game].player2 = _player2;
@@ -165,6 +168,7 @@ contract RockPaperScissors {
         games[_game].p1HashedMove = "";
         games[_game].p2Move = 0;
         games[_game].jackpot = 0;
+        games[_game].deadline = 0;
     }
 
 }
