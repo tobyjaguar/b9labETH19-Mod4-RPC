@@ -46,7 +46,8 @@ contract RockPaperScissors {
     returns(bool success)
     {
         require(msg.sender == owner);
-        require(_expirationTime > 5760);
+        require(_expirationTime%2 == 0);
+        require(_expirationTime > expiration / 2);
         expiration = _expirationTime;
 
         LogExpirationChange(_expirationTime);
