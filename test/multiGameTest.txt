@@ -1,0 +1,57 @@
+describe("play multiple games", function() {
+  const gamePlay = [
+    {gameID: 1, player1Move: 1, player2Move: 3}, //player1 wins
+    {gameID: 2, player1Move: 2, player2Move: 2}, //players tie
+    {gameID: 3, player1Move: 3, player2Move: 2}, //player1 wins
+    {gameID: 4, player1Move: 1, player2Move: 2}, //player2 wins
+    {gameID: 5, player1Move: 2, player2Move: 1} //player1 wins
+  ];
+
+  function runGame(game) {
+    var gasUsed = 0;
+    var gasPrice = 0;
+    var txFee = 0;
+    var winningsP1 = 0;
+
+    return contractInstance.helperHash.call(player1, game.player1Move, p1Password)
+    .then(p1HashedMove => {
+      return contractInstance.createGame(game.gameID, player2, p1HashedMove, {from: player1, value: sendAmount});
+    })
+    .then(txObj => {
+      gasUsed = txObj.receipt.gasUsed;
+      return web3.eth.getTransactionPromise(txObj.tx);
+    })
+    .then(tx => {
+      gasPrice = tx.gasPrice;
+      txFee += gasUsed * gasPrice;
+      return contractInstance.player2(game.gameID, game.player2Move, {from: player2, value: sendAmount});
+    })
+    .then(() => {
+      return contractInstance.settleGame(game.gameID, game.player1Move, p1Password, {from: player1})
+    })
+    .then(txObj => {
+      gasUsed = txObj.receipt.gasUsed;
+      return web3.eth.getTransactionPromise(txObj.tx)
+    })
+    .then(tx => {
+      gasPrice = tx.gasPrice;
+      txFee += gasUsed * gasPrice;
+    })
+    .then(() => {
+      return Promise.resolve(txFee);
+    })
+  }
+
+  it("Should not leak over multiple games", function() {
+    //errors
+    gamePlay.map(game => runGame(game))
+
+    //also errors
+    sequentialPromise({
+      () => Promise.resolve(runGame(gamePlay[0])),
+      () => Promise.resolve(runGame(gamePlay[2]))
+    })
+
+  });
+
+});

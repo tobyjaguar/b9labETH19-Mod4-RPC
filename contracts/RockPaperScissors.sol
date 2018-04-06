@@ -16,6 +16,7 @@ contract RockPaperScissors {
         bytes32 p1HashedMove;
         uint8 p2Move;
         uint256 jackpot;
+        uint256 expiry;
         uint256 deadline;
     }
 
@@ -46,8 +47,6 @@ contract RockPaperScissors {
     returns(bool success)
     {
         require(msg.sender == owner);
-        require(_expirationTime%2 == 0);
-        require(_expirationTime > expiration / 2);
         expiration = _expirationTime;
 
         LogExpirationChange(_expirationTime);
@@ -79,6 +78,7 @@ contract RockPaperScissors {
         games[_game].player2 = _player2;
         games[_game].p1HashedMove = _hashedMove;
         games[_game].jackpot = msg.value;
+        games[_game].expiry = expiration;
         games[_game].deadline = block.number + expiration;
 
         LogGameCreated(_game, msg.sender, _player2, msg.value);
@@ -94,7 +94,7 @@ contract RockPaperScissors {
         require(msg.sender == games[_game].player2);
         require(0 < _p2Move && _p2Move < 4);
         require(msg.value == games[_game].jackpot);
-        games[_game].deadline = block.number + expiration;
+        games[_game].deadline = block.number + games[_game].expiry;
         games[_game].p2Move = _p2Move;
 
         LogPlayer2(_game, msg.sender, msg.value);
@@ -110,7 +110,7 @@ contract RockPaperScissors {
         require(0 < _p1Move && _p1Move < 4);
         require(games[_game].p1HashedMove == helperHash(msg.sender, _p1Move, _p1Password));
         uint outcome = gameLogic[_p1Move][games[_game].p2Move];
-        require(outcome > 0 && outcome < 4);
+        require(0 < outcome && outcome < 4);
         if (outcome == 2) {
             //player 1 wins
             winnings[games[_game].player1] += games[_game].jackpot * 2;
@@ -170,6 +170,7 @@ contract RockPaperScissors {
         games[_game].p1HashedMove = "";
         games[_game].p2Move = 0;
         games[_game].jackpot = 0;
+        games[_game].expiry = 0;
         games[_game].deadline = 0;
     }
 

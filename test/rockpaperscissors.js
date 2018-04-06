@@ -43,20 +43,15 @@ contract ('RockPaperScissors', function(accounts) {
   });
 
   //test expiration
-  it("Should be able to set the deadline", function() {
-    var currentBlock;
-    return web3.eth.getBlockNumberPromise()
-    .then(block => {
-      currentBlock = block;
-      return contractInstance.expiration.call({from: owner});
-    })
+  it("Should be able to get the block expiration offset", function() {
+    return contractInstance.expiration.call({from: owner})
     .then(function(result) {
       assert.strictEqual(result.toString(10), blockExpiration.toString(10), "expiration did not return correctly.");
     });
   });
 
   it("Should be able to change expiration time", function() {
-    var newExirpation = 5760;
+    var newExirpation = 5;
     return contractInstance.changeExpiration(newExirpation, {from: owner})
     .then(result => {
       assert.equal(result.receipt.status, true, "changeExpiration did not return true");
@@ -80,13 +75,10 @@ contract ('RockPaperScissors', function(accounts) {
     return contractInstance.helperHash.call(player1, player1Move, p1Password)
     .then(result => {
       p1HashedMove = result;
-      return web3.eth.getBlockNumberPromise();
-    })
-    .then(blockNumber => {
-      currentBlock = blockNumber;
       return contractInstance.createGame(gameNumber, player2, p1HashedMove, {from: player1, value: sendAmount});
     })
     .then(result => {
+      currentBlock = result.receipt.blockNumber;
       assert.equal(result.receipt.status, true, "createGame did not return true");
       assert.strictEqual(result.logs[0].args.eGame.toString(10), gameNumber.toString(10), "Event did not return correct game");
       assert.strictEqual(result.logs[0].args.ePlayer1, player1, "Event did not return correct player");
@@ -99,7 +91,7 @@ contract ('RockPaperScissors', function(accounts) {
       assert.strictEqual(result[1], player2, "Player1's address did not return correctly");
       assert.strictEqual(result[2], p1HashedMove, "Player1's move did not return correctly");
       assert.strictEqual(result[4].toString(10), sendAmount.toString(10), "Jackpot did not return correctly");
-      assert.strictEqual(result[5].toString(10), (currentBlock + blockExpiration + 1).toString(10), "deadline did not return correctly");
+      assert.strictEqual(result[6].toString(10), (currentBlock + blockExpiration).toString(10), "deadline did not return correctly");
     });
     //end test
   });
@@ -111,7 +103,6 @@ contract ('RockPaperScissors', function(accounts) {
     var player2Move = 2;
     var p1Password = "abc";
     var p1HashedMove;
-    var blockNumber;
     var sendAmount = 1000;
 
     beforeEach(function() {
@@ -123,21 +114,29 @@ contract ('RockPaperScissors', function(accounts) {
     })
 
     it("Should add player 2", function() {
-
       return contractInstance.player2(gameNumber, player2Move, {from: player2, value: sendAmount})
-      .then(result => {
-        blockNumber = result.receipt.blockNumber;
-        assert.equal(result.receipt.status, true, "Player2 did not return true");
-        assert.strictEqual(result.logs[0].args.eGame.toString(10), gameNumber.toString(10), "Event did not return correct game");
-        assert.strictEqual(result.logs[0].args.ePlayer2, player2, "Event did not return correct player");
-        assert.strictEqual(result.logs[0].args.eJackpot.toString(10), sendAmount.toString(10), "Event did not return correct jackpot");
+      .then(txObj => {
+        assert.equal(txObj.receipt.status, true, "Player2 did not return true");
+        assert.strictEqual(txObj.logs[0].args.eGame.toString(10), gameNumber.toString(10), "Event did not return correct game");
+        assert.strictEqual(txObj.logs[0].args.ePlayer2, player2, "Event did not return correct player");
+        assert.strictEqual(txObj.logs[0].args.eJackpot.toString(10), sendAmount.toString(10), "Event did not return correct jackpot");
+      });
+    //end test
+    });
+
+    it("Should have reset the deadline", function() {
+      var blockNumber = 0;
+      var gameExpiry = 0;
+      return contractInstance.player2(gameNumber, player2Move, {from: player2, value: sendAmount})
+      .then(txObj => {
+        blockNumber = txObj.receipt.blockNumber;
         return contractInstance.games.call(gameNumber, {from: owner});
       })
       .then(result => {
+        gameExpiry = result[5];
         assert.strictEqual(result[3].toString(10), player2Move.toString(10), "Player2's move did not return correctly");
-        assert.strictEqual(result[5].toString(10), (blockNumber + blockExpiration).toString(10), "Game's deadline did not return correctly");
+        assert.strictEqual(result[6].toString(10), gameExpiry.plus(blockNumber).toString(10), "Game's deadline did not return correctly");
       });
-    //end test
     });
 
     //end describe
@@ -511,148 +510,95 @@ contract ('RockPaperScissors', function(accounts) {
     //end describe
   });
 
-describe("play multiple games", function() {
-  const gamePlay = [
-    {gameID: 1, player1Move: 1, player2Move: 2}, //player1 wins
-    {gameID: 2, player1Move: 2, player2Move: 2}, //players tie
-    {gameID: 3, player1Move: 3, player2Move: 2}, //player1 wins
-    {gameID: 4, player1Move: 1, player2Move: 3}, //player2 wins
-    {gameID: 5, player1Move: 2, player2Move: 1}, //player1 wins
-  ];
-  var sendAmount = 1000;
-  var balanceBefore;
-  var balanceNow;
-  var p1Winnings = new BigNumber(0);
-  var txFee = 0;
-
-  before(function() {
-    return web3.eth.getBalancePromise(player1)
-    .then(balance => {
-      balanceBefore = balance;
-    });
-  })
-
-  gamePlay
-    .forEach(game => {
-
-      it("Should run multiple games with game: " + game.gameID, function() {
-        var p1Password = "abc";
-        var p1HashedMove;
-        var gasUsed = 0;
-        var gasPrice = 0;
-
-        return contractInstance.helperHash.call(player1, game.player1Move, p1Password)
-        .then(hashedResult => {
-          p1HashedMove = hashedResult;
-          return contractInstance.createGame(game.gameID, player2, p1HashedMove, {from: player1, value: sendAmount});
-        })
-        .then(txObj => {
-          gasUsed = txObj.receipt.gasUsed;
-          assert.equal(txObj.receipt.status, true, "settleGame did not return true");
-          return web3.eth.getTransactionPromise(txObj.tx);
-        })
-        .then(tx => {
-          gasPrice = tx.gasPrice;
-          txFee += gasUsed * gasPrice;
-          return contractInstance.player2(game.gameID, game.player2Move, {from: player2, value: sendAmount});
-        })
-        .then(txObj => {
-          assert.equal(txObj.receipt.status, true, "player2 did not return true");
-          return contractInstance.settleGame(game.gameID, game.player1Move, p1Password, {from: player1});
-        })
-        .then(txObj => {
-          gasUsed = txObj.receipt.gasUsed;
-          assert.equal(txObj.receipt.status, true, "settleGame did not return true");
-          return web3.eth.getTransactionPromise(txObj.tx);
-        })
-        .then(tx => {
-          gasPrice = tx.gasPrice;
-          txFee += gasUsed * gasPrice;
-          return contractInstance.winnings.call(player1, {from: owner});
-        })
-        .then(winnings => {
-          p1Winnings = p1Winnings.plus(winnings);
-        });
-        //end test
-      });
-
-        //end for
-      });
-
-/*
   describe("play multiple games", function() {
     const gamePlay = [
-      {gameID: 1, player1Move: 1, player2Move: 2}, //player1 wins
+      {gameID: 1, player1Move: 1, player2Move: 3}, //player1 wins
       {gameID: 2, player1Move: 2, player2Move: 2}, //players tie
       {gameID: 3, player1Move: 3, player2Move: 2}, //player1 wins
-      {gameID: 4, player1Move: 1, player2Move: 3}, //player2 wins
-      {gameID: 5, player1Move: 2, player2Move: 1}, //player1 wins
+      {gameID: 4, player1Move: 1, player2Move: 2}, //player2 wins
+      {gameID: 5, player1Move: 2, player2Move: 1} //player1 wins
     ];
+
+    it("Should run multiple games", function() {
+    var txFee = 0;
     var p1Password = "abc";
     var sendAmount = 1000;
     var balanceBefore;
-    var balanceNow;
-    var p1HashedMove;
-    var gasUsed = 0;
-    var gasPrice = 0;
-    var txFee = 0;
+    var game = gamePlay[0];
+    var game2 = gamePlay[1];
 
-    before(function() {
-      return web3.eth.getBalancePromise(player1)
-      .then(balance => {
-        balanceBefore = balance;
-      });
+    return web3.eth.getBalancePromise(player1)
+    .then(balance => {
+      balanceBefore = balance;
+      return contractInstance.helperHash.call(player1, game.player1Move, p1Password);
     })
+    .then(p1HashedMove => {
+      return contractInstance.createGame(game.gameID, player2, p1HashedMove, {from: player1, value: sendAmount});
+    })
+    .then(txObj => {
+      gasUsed = txObj.receipt.gasUsed;
+      return web3.eth.getTransactionPromise(txObj.tx);
+    })
+    .then(tx => {
+      gasPrice = tx.gasPrice;
+      txFee += gasUsed * gasPrice;
+      return contractInstance.player2(game.gameID, game.player2Move, {from: player2, value: sendAmount});
+    })
+    .then(() => {
+      return contractInstance.settleGame(game.gameID, game.player1Move, p1Password, {from: player1});
+    })
+    .then(txObj => {
+      gasUsed = txObj.receipt.gasUsed;
+      return web3.eth.getTransactionPromise(txObj.tx);
+    })
+    .then(tx => {
+      gasPrice = tx.gasPrice;
+      txFee += gasUsed * gasPrice;
 
-    it("Should run multiple games", function() {
-        gamePlay
-        .forEach(game => {
-          return sequentialPromise([
-            () => Promise.resolve(contractInstance.helperHash.call(player1, game.player1Move, p1Password))
-                  .then(p1HashedMove => {
-                    return contractInstance.createGame(game.gameID, player2, p1HashedMove, {from: player1, value: sendAmount});
-                  })
-                  .then(txObj => {
-                    gasUsed = txObj.receipt.gasUsed;
-                    return web3.eth.getTransactionPromise(txObj.tx);
-                  })
-                  .then(tx => {
-                    gasPrice = tx.gasPrice;
-                    txFee += gasUsed * gasPrice;
-                  }),
-            () => Promise.resolve(contractInstance.player2(game.gameID, game.player2Move, {from: player2, value: sendAmount})),
-            () => Promise.resolve(contractInstance.settleGame(game.gameID, game.player1Move, p1Password, {from: player1}))
-                  .then(txObj => {
-                    gasUsed = txObj.receipt.gasUsed;
-                    return web3.eth.getTransactionPromise(txObj.tx)
-                  })
-                  .then(tx => {
-                    gasPrice = tx.gasPrice;
-                    txFee += gasUsed * gasPrice;
-                  }),
-            () => Promise.resolve(contractInstance.games.call(game.gameID, {from: owner}))
-                  .then(result => {
-                    console.log(
-                      "game: " + game.gameID + "\n" +
-                      "player 2 move: " + result[3]
-                    );
-                  })
-          ])
-          .then();
-          //end for
-        });
+      //game 2
+      return contractInstance.helperHash.call(player1, game2.player1Move, p1Password);
+    })
+    .then(p1HashedMove => {
+      return contractInstance.createGame(game2.gameID, player2, p1HashedMove, {from: player1, value: sendAmount});
+    })
+    .then(txObj => {
+      gasUsed = txObj.receipt.gasUsed;
+      return web3.eth.getTransactionPromise(txObj.tx);
+    })
+    .then(tx => {
+      gasPrice = tx.gasPrice;
+      txFee += gasUsed * gasPrice;
+      return contractInstance.player2(game2.gameID, game2.player2Move, {from: player2, value: sendAmount});
+    })
+    .then(() => {
+      return contractInstance.settleGame(game2.gameID, game2.player1Move, p1Password, {from: player1});
+    })
+    .then(txObj => {
+      gasUsed = txObj.receipt.gasUsed;
+      return web3.eth.getTransactionPromise(txObj.tx);
+    })
+    .then(tx => {
+      gasPrice = tx.gasPrice;
+      txFee += gasUsed * gasPrice;
+
+      return contractInstance.withdraw({from: player1});
+    })
+    .then(txObj => {
+      gasUsed = txObj.receipt.gasUsed;
+
+      return web3.eth.getTransactionPromise(txObj.tx);
+    })
+    .then(tx => {
+      gasPrice = tx.gasPrice;
+      txFee += gasUsed * gasPrice;
+
+      return web3.eth.getBalancePromise(player1);
+    })
+    .then(balance => {
+      assert.strictEqual(balance.toString(10), balanceBefore.plus(sendAmount).minus(txFee).toString(10), "Player1's balance did not return correctly");
+    });
       //end test
     });
-*/
-    it("Should account for player1's winnings", function() {
-      return web3.eth.getBalancePromise(player1)
-      .then(balanceNow => {
-        assert.strictEqual(balanceNow.toString(10), balanceBefore.minus(sendAmount*5).minus(txFee).toString(10), "player1's balance did not return correctly");
-        assert.strictEqual(p1Winnings.toString(10), (sendAmount * 7).toString(10), "player1's winnings did not return correctly");
-      });
-        //end test
-    });
-
     //end describe
   });
 
